@@ -1,12 +1,12 @@
 export class ProductResponse {
     id?: number;
-    categoryId?: number;
+    categoryName?: string;
     price?: number;
     productName?: string;
     
-    constructor(id?: number, categoryId?: number, price?: number, productName?: string) {
+    constructor(id?: number, categoryName?: string, price?: number, productName?: string) {
         this.id = id;
-        this.categoryId = categoryId;
+        this.categoryName = categoryName;
         this.price = price;
         this.productName = productName;
     }

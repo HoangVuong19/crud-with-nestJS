@@ -1,54 +1,102 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ProductRequest } from 'src/dto/request/product.request';
 import { ProductResponse } from 'src/dto/response/product.response';
-import { Product } from 'src/models/product.model';
+import { Category } from 'src/entities/categories.entity';
+import { Product } from 'src/entities/products.entity';
+import { Repository } from 'typeorm';
+
 
 @Injectable()
 export class ProductService {
-  private productList: Product[] = [
-    {id: 1, price: 10000, categoryId: 1, productName: 'iphone11'},
-    {id: 2, price: 20000, categoryId: 2, productName: 'laptop accer'},
-    {id: 3, price: 30000, categoryId: 3, productName: 'PC'},
-  ]
 
-  getProducts(): Product[] {
-    return this.productList;
+  constructor(
+    @InjectRepository(Product) private productRepository: Repository<Product>,
+    @InjectRepository(Category) private categoryRepository: Repository<Category>){}
+
+  async getProducts(): Promise<ProductResponse[]> {
+    const productList: Product[] = await this.productRepository.find({ relations: ['category'] });
+
+    const productResponseList: ProductResponse[] = productList.map(product => {
+      const productResponse = new ProductResponse();
+      productResponse.id = product.id;
+      productResponse.categoryName = product.category ? product.category.categoryName : null;
+      productResponse.price = product.price;
+      productResponse.productName = product.productName;
+      return productResponse;
+    });
+
+    return productResponseList;
   }
 
-  createProduct(productRequest: ProductRequest): ProductResponse {
-    const product: Product = {
-      id: Math.random(),
-      ...productRequest
+  async createProduct(productRequest: ProductRequest): Promise<ProductResponse> {
+    const category = await this.categoryRepository.findOneBy({ id: productRequest.categoryId });
+
+    if (!category) {
+      throw new Error('Category not found');
     }
-    this.productList.push(product)
-    const productResponse: ProductResponse = {
-      ...product
-    }
+
+    const newProduct = new Product(
+      productRequest.price,
+      productRequest.productName,
+      category
+    );
+    const product = await this.productRepository.save(newProduct);
+
+    const productResponse = new ProductResponse(
+      product.id,
+      product.category.categoryName,
+      product.price,
+      product.productName
+    );
+
     return productResponse;
   }
 
-  detailProduct(id: number): ProductResponse {
-    const product = this.productList.find(product => product.id === Number(id));
+  async detailProduct(id: number):  Promise<ProductResponse | null> {
+    const product = await this.productRepository.findOne({ where: { id }, relations: ['category'] });
+
     if (product) {
-      return product;
+      const productResponse = new ProductResponse(
+        product.id,
+        product.category.categoryName,
+        product.price,
+        product.productName
+      );
+      return productResponse;
     }
     return null;
   }
 
-  updateProduct(id: number, productRequest: ProductRequest): ProductResponse {
-    const product = this.productList.find(product => product.id === Number(id));
+  async updateProduct(id: number, productRequest: ProductRequest): Promise<ProductResponse | null> {
+    const category = await this.categoryRepository.findOneBy({ id: productRequest.categoryId });
+
+    if (!category) {
+      throw new Error('Category not found');
+    }
+
+    const product = await this.productRepository.findOne({ where: { id }, relations: ['category'] });
 
     if (product) {
       Object.assign(product, productRequest);
-      return product;
+      product.category = category;
+      const productUpdated = await this.productRepository.save(product);
+      
+      const productResponse = new ProductResponse(
+        productUpdated.id,
+        productUpdated.category.categoryName,
+        productUpdated.price,
+        productUpdated.productName
+      );
+      return productResponse;
     }
     return null;
   }
 
-  deleteProduct(id: number): boolean {
-    const product = this.productList.find(product => product.id === Number(id));
+  async deleteProduct(id: number): Promise<boolean> {
+    const product = await this.productRepository.findOneBy({id});
     if (product) {
-      this.productList.splice(id, 1)
+      await this.productRepository.delete(id);
       return true;
     }
     return false;
